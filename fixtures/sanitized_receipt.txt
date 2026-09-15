@@ -1,0 +1,6 @@
+SANITIZED CAFE
+Apples 3.00
+Bread 2.00
+Subtotal 5.00
+Tax 0.40
+Total 5.40

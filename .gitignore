@@ -1,0 +1,48 @@
+.DS_Store
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# Private receipt inputs and OCR/runtime output
+/receipts/
+/input/
+/inputs/
+/output/
+/outputs/
+/data/
+/tmp/
+/*.jpg
+/*.jpeg
+/*.png
+/*.heic
+/*.tif
+/*.tiff
+/*_converted.*
+/*_preprocessed.*
+
+# OCR/model caches and local databases
+.paddleocr/
+.cache/
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs and generated evidence
+*.log
+.artifacts/
+screenshots/
+traces/
