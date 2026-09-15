@@ -9,8 +9,8 @@ Last reviewed: 2026-09-15
 - Distribution: open-source Python package and local stdio MCP server
 - Network transport: none
 - OCR: Tesseract by default; PaddleOCR is optional
-- Canonical remote: `https://github.com/gauravsdama/receiptSplitter` (create after the publishable
-  file review)
+- Canonical remote: `https://github.com/gauravsdama/receiptSplitter` (configured locally; the
+  verified release commit has not been pushed)
 
 ## Implemented safeguards
 
