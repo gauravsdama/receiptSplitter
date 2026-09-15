@@ -98,8 +98,11 @@ async def split_receipt(
     return {
         "table_markdown": state.to_markdown(),
         "validation": report,
-        "needs_new_photo": report["needs_review"] and table.empty,
-        "next": "Review the rows, then call provide_assignments with stable row IDs.",
+        "needs_new_photo": report["needs_review"],
+        "next": (
+            "Retake the photo if the rows or totals are unclear; otherwise review the rows, "
+            "then call provide_assignments with stable row IDs."
+        ),
     }
 
 

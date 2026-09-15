@@ -60,3 +60,11 @@ def test_empty_or_mismatched_receipt_needs_review() -> None:
     table, expected = parse_receipt_lines(["Tea 2.00", "TOTAL 3.00"])
     mismatch = ReceiptState(df=table, expected=expected, tax_included=True)
     assert mismatch.validation_report()["ok"] is False
+
+
+def test_missing_receipt_total_needs_a_new_photo() -> None:
+    table, expected = parse_receipt_lines(["Tea 2.00"])
+    state = ReceiptState(df=table, expected=expected)
+
+    assert state.validation_report()["needs_review"] is True
+    assert "total was not recognized" in state.validation_report()["issues"][0]

@@ -117,6 +117,8 @@ class ReceiptState:
     def validation_report(self) -> dict[str, Any]:
         calculated = self.compute_totals()
         issues: list[str] = []
+        if "total" not in self.expected:
+            issues.append("The receipt total was not recognized. Try a clearer, straight-on photo.")
         keys = ("total",) if self.tax_included else ("subtotal", "tax", "total")
         for key in keys:
             if key in self.expected and _money(calculated[key]) != _money(self.expected[key]):
