@@ -13,8 +13,8 @@ an image is unclear or an assignment is ambiguous, use a better photo or assign 
 - [uv](https://docs.astral.sh/uv/)
 - Tesseract 5.x (`brew install tesseract`); verified locally with Tesseract 5.5.1
 
-PaddleOCR is available as an optional alternative. The default install uses Tesseract and does not
-download Paddle models.
+PaddleOCR is available as an optional alternative on Python 3.13. The default install uses
+Tesseract and does not download Paddle models.
 
 ## Install and run
 
@@ -35,26 +35,43 @@ removed after OCR.
 Optional Paddle setup:
 
 ```bash
+uv python pin 3.13
 uv sync --locked --extra paddle
 RECEIPT_OCR_ENGINE=paddle uv run receipt-splitter
 ```
+
+Python 3.14 installs omit the Paddle dependencies because the locked Paddle runtime has no 3.14
+wheel. Selecting Paddle on 3.14 returns a configuration error instead of silently falling back.
 
 ## MCP flow
 
 1. Call `split_receipt` with an image inside the configured input folder.
 2. Review every row and the validation report.
-3. Call `provide_assignments` with row IDs mapped to names.
-4. Call `finalize_split`; settle only when it reports `ready: true`.
-5. Call `reset` after the split is complete.
+3. Use `correct_row` for a wrong item name, quantity, line total, or tax applicability.
+4. Call `provide_assignments` with row IDs mapped to names.
+5. Call `finalize_split`; settle only when it reports `ready: true`.
+6. Call `reset` after the split is complete.
 
 Duplicate names are kept as separate rows. Fuzzy matches that are unclear remain unresolved. Tax is
-allocated in whole cents, so the per-person totals reconcile exactly with the receipt.
+allocated in whole cents. Finalization separately proves that the sum of every person's total equals
+the recognized receipt total.
+
+The amount at the end of an item row is always treated as that row's line total. A printed quantity
+is retained as metadata; Receipt Splitter does not guess whether a store printed a unit price or
+multiply the amount by quantity. Use `correct_row` when OCR captured either field incorrectly.
+
+OCR is limited to one concurrent job by default. Tesseract receives a 30-second timeout, callers
+wait up to five seconds for OCR capacity, and timed-out background work keeps its slot until it
+actually exits. Set `RECEIPT_OCR_TIMEOUT_SECONDS` from 1 to 300,
+`RECEIPT_OCR_QUEUE_TIMEOUT_SECONDS` from 1 to 60, or `RECEIPT_MAX_CONCURRENT_OCR` from 1 to 4 before
+launch. Invalid values fail at startup.
 
 ## Privacy
 
 Receipt photos stay on the machine. The server does not upload them, log their contents, or retain
 preprocessed copies. Sessions expire after two hours and are limited to 32 active clients by
-default. `RECEIPT_SESSION_TTL_SECONDS` and `RECEIPT_MAX_SESSIONS` can lower those bounds.
+default. `RECEIPT_SESSION_TTL_SECONDS` accepts 60 to 86,400 seconds and
+`RECEIPT_MAX_SESSIONS` accepts 1 to 256.
 
 Keep real receipts outside the checkout. Root-level images and common input/output folders are
 ignored as a second line of defense. The repository fixture is fictitious text.

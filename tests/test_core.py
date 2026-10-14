@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from receiptsplitter.core import ReceiptState, parse_receipt_lines
+import pytest
+
+from receiptsplitter.core import ReceiptCorrectionError, ReceiptState, parse_receipt_lines
 
 
 def test_fixture_parses_and_reconciles() -> None:
@@ -8,9 +10,23 @@ def test_fixture_parses_and_reconciles() -> None:
     table, expected = parse_receipt_lines(fixture.read_text(encoding="utf-8").splitlines())
     state = ReceiptState(df=table, expected=expected)
 
-    assert table[["item_id", "item", "qty", "price"]].to_dict("records") == [
-        {"item_id": 0, "item": "Apples", "qty": 1, "price": 3.0},
-        {"item_id": 1, "item": "Bread", "qty": 1, "price": 2.0},
+    assert [row.as_dict() for row in table] == [
+        {
+            "item_id": 0,
+            "item": "Apples",
+            "qty": 1,
+            "line_total": 3.0,
+            "tax_applies": True,
+            "who": "",
+        },
+        {
+            "item_id": 1,
+            "item": "Bread",
+            "qty": 1,
+            "line_total": 2.0,
+            "tax_applies": True,
+            "who": "",
+        },
     ]
     assert state.validation_report() == {
         "calculated": {"subtotal": 5.0, "tax": 0.4, "total": 5.4},
@@ -28,9 +44,9 @@ def test_duplicate_names_require_row_ids() -> None:
     state = ReceiptState(df=table, expected=expected)
 
     assert state.assign({"Tea": "Sam"}) == ["Tea"]
-    assert list(state.df["who"]) == ["", ""]
+    assert [row.who for row in state.df] == ["", ""]
     assert state.assign({"0": "Sam", "1": "Lee"}) == []
-    assert list(state.df["who"]) == ["Sam", "Lee"]
+    assert [row.who for row in state.df] == ["Sam", "Lee"]
 
 
 def test_tax_cents_reconcile_exactly() -> None:
@@ -68,3 +84,59 @@ def test_missing_receipt_total_needs_a_new_photo() -> None:
 
     assert state.validation_report()["needs_review"] is True
     assert "total was not recognized" in state.validation_report()["issues"][0]
+
+
+def test_summary_labels_are_anchored_and_do_not_consume_items() -> None:
+    rows, expected = parse_receipt_lines(
+        [
+            "Total Cereal 4.00",
+            "Tax Free Tea 2.00",
+            "TOTAL SAVINGS 1.00",
+            "SUB TOTAL: $6.00",
+            "SALES TAX: $0.48",
+            "AMOUNT DUE: $6.48",
+        ]
+    )
+
+    assert [row.item for row in rows] == ["Total Cereal", "Tax Free Tea", "TOTAL SAVINGS"]
+    assert expected == {"subtotal": 6.0, "tax": 0.48, "total": 6.48}
+
+
+def test_quantity_is_metadata_and_trailing_amount_is_line_total() -> None:
+    rows, expected = parse_receipt_lines(
+        ["Soda qty 3 6.00", "SUBTOTAL 6.00", "TAX 0.00", "TOTAL 6.00"]
+    )
+    state = ReceiptState(df=rows, expected=expected)
+
+    assert rows[0].qty == 3
+    assert rows[0].line_total == 6
+    assert state.compute_totals()["subtotal"] == 6.0
+
+
+def test_correction_revalidates_and_final_split_reconciles() -> None:
+    rows, expected = parse_receipt_lines(["Tea 3.00", "SUBTOTAL 2.00", "TAX 0.20", "TOTAL 2.20"])
+    state = ReceiptState(df=rows, expected=expected)
+    assert state.validation_report()["ok"] is False
+
+    corrected = state.correct_row(0, item="Tea", quantity=2, line_total="2.00")
+    corrected.who = "Sam"
+
+    assert corrected.qty == 2
+    assert state.validation_report()["ok"] is True
+    assert state.split_reconciliation() == {
+        "expected_total": 2.2,
+        "per_person_total": 2.2,
+        "difference": 0.0,
+        "ok": True,
+    }
+
+
+def test_invalid_multi_field_correction_is_atomic() -> None:
+    rows, expected = parse_receipt_lines(["Tea 2.00", "TOTAL 2.00"])
+    state = ReceiptState(df=rows, expected=expected, tax_included=True)
+
+    with pytest.raises(ReceiptCorrectionError, match="valid decimal"):
+        state.correct_row(0, item="Changed", line_total="not-money")
+
+    assert rows[0].item == "Tea"
+    assert rows[0].line_total == 2

@@ -53,14 +53,45 @@ def test_ocr_derivative_is_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     source = _png(tmp_path / "receipt.png")
     observed: list[Path] = []
 
-    def fake_ocr(path: Path, **_kwargs: object) -> str:
+    def fake_ocr(path: Path, _timeout_seconds: float) -> str:
         observed.append(Path(path))
         assert Path(path).exists()
         return "Tea 2.00\nTOTAL 2.00"
 
-    monkeypatch.setattr(images.pytesseract, "image_to_string", fake_ocr)
+    monkeypatch.setattr(images, "_tesseract_text", fake_ocr)
     assert images.extract_receipt_lines(source) == ["Tea 2.00", "TOTAL 2.00"]
     assert observed and not observed[0].exists()
+
+
+def test_ocr_engine_and_timeout_settings_are_validated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _png(tmp_path / "receipt.png")
+    monkeypatch.setenv("RECEIPT_OCR_ENGINE", "remote")
+    with pytest.raises(images.ReceiptConfigurationError, match=r"tesseract.*paddle"):
+        images.extract_receipt_lines(source)
+
+    monkeypatch.setenv("RECEIPT_OCR_ENGINE", "tesseract")
+    with pytest.raises(images.ReceiptConfigurationError, match="between 1 and 300"):
+        images.extract_receipt_lines(source, timeout_seconds=0)
+
+
+def test_tesseract_receives_a_supported_filename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "receipt.png"
+    source.touch()
+    observed: dict[str, object] = {}
+
+    def fake_image_to_string(value: object, **kwargs: object) -> str:
+        observed["value"] = value
+        observed.update(kwargs)
+        return "Tea 2.00"
+
+    monkeypatch.setattr("pytesseract.image_to_string", fake_image_to_string)
+
+    assert images._tesseract_text(source, 12) == "Tea 2.00"
+    assert observed == {"value": str(source), "config": "--psm 6", "timeout": 12}
 
 
 def test_perspective_preprocessing_produces_an_image(tmp_path: Path) -> None:

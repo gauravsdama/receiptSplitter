@@ -1,6 +1,6 @@
 # Release readiness
 
-Last reviewed: 2026-09-15
+Last reviewed: 2026-10-14
 
 ## Product boundary
 
@@ -9,8 +9,7 @@ Last reviewed: 2026-09-15
 - Distribution: open-source Python package and local stdio MCP server
 - Network transport: none
 - OCR: Tesseract by default; PaddleOCR is optional
-- Canonical remote: `https://github.com/gauravsdama/receiptSplitter` (configured locally; the
-  verified release commit has not been pushed)
+- Canonical remote: `https://github.com/gauravsdama/receiptSplitter`
 
 ## Implemented safeguards
 
@@ -19,10 +18,21 @@ Last reviewed: 2026-09-15
 - OCR preprocessing uses a private temporary directory with automatic cleanup. Failed writes are
   detected.
 - Errors omit receipt contents and local paths.
-- OCR work runs outside the async event loop. The optional Paddle model is cached once per process.
+- OCR work runs outside the async event loop with bounded concurrency, queue wait, and Tesseract
+  execution time. A timed-out worker retains its capacity slot until it exits.
+- Heavy OCR modules load only when an image reaches preprocessing or OCR.
+- The optional Paddle model is cached once per process and is limited to Python 3.13, matching the
+  locked runtime wheel.
 - Sessions expire and have a fixed upper bound.
 - Duplicate items have stable row IDs. Ambiguous fuzzy assignments remain unresolved.
-- Tax allocation uses whole cents and reconciles the final total exactly.
+- Summary labels must occupy the complete OCR line, preventing item names that contain "tax" or
+  "total" from being discarded.
+- Parsed trailing amounts are explicit line totals. Quantity does not multiply the amount, and
+  `correct_row` provides a validated correction boundary.
+- Tax allocation uses whole cents. Finalization independently reconciles per-person totals against
+  the recognized receipt total.
+- Tool errors include stable, privacy-safe categories without exposing receipt text or paths.
+- Receipt rows use small typed domain objects; pandas and tabulate are not runtime dependencies.
 - Git ignores receipt images and runtime data. The release privacy check rejects images, databases,
   environment files, and personal absolute paths from the publishable set.
 

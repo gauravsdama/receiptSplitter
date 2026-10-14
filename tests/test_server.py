@@ -1,3 +1,5 @@
+import asyncio
+import threading
 from pathlib import Path
 from typing import Any, cast
 
@@ -37,12 +39,40 @@ async def test_processing_failure_redacts_the_path(
     monkeypatch.setattr(
         server,
         "extract_receipt_lines",
-        lambda _path: (_ for _ in ()).throw(RuntimeError("sensitive OCR output")),
+        lambda _path, **_kwargs: (_ for _ in ()).throw(RuntimeError("sensitive OCR output")),
     )
 
     result = await server.split_receipt(str(private_path), cast(Any, None))
     assert result == {
         "error": "Receipt processing failed without retaining a derivative image.",
+        "error_detail": {"category": "processing_failed", "retryable": True},
         "needs_new_photo": True,
     }
     assert str(private_path) not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_ocr_holds_its_slot_until_worker_exits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocked_ocr(_path: Path, **_kwargs: object) -> list[str]:
+        started.set()
+        release.wait(timeout=2)
+        return []
+
+    slots = asyncio.Semaphore(1)
+    monkeypatch.setattr(server, "_OCR_SLOTS", slots)
+    monkeypatch.setattr(server, "extract_receipt_lines", blocked_ocr)
+    task = asyncio.create_task(server._extract_with_limits(tmp_path / "receipt.png"))
+    assert await asyncio.to_thread(started.wait, 1)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert slots.locked()
+
+    release.set()
+    await asyncio.wait_for(slots.acquire(), timeout=1)
