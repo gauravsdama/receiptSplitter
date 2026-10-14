@@ -12,6 +12,8 @@ jobs:
   verify:
     runs-on: macos-15
     timeout-minutes: 20
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       fail-fast: false
       matrix:
